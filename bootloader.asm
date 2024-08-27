@@ -1,139 +1,110 @@
-[BITS 16]            ; We're in real mode
-[ORG 0x7C00]         ; Bootloader loaded at 0x7C00
+; bootloader.asm
+BITS 16
+ORG 0x7C00
 
+; Define the boot messages
+msg_real_mode db 'Real mode', 0
+msg_protected_mode db 'Protected mode', 0
+msg_long_mode db 'Long mode', 0
+msg_done db 'Done!', 0
 
-start:
-    cli              ; Disable interrupts
-    xor ax, ax       ; Clear AX register
-    mov ds, ax       ; Set DS segment to 0
-    mov es, ax       ; Set ES segment to 0
-    mov ss, ax       ; Set SS segment to 0
-    mov sp, 0x7C00   ; Set stack pointer to 0x7C00
+; Print the initial message
+mov si, msg_real_mode
+call print_message
 
+; Set up the GDT
+lgdt [gdt_descriptor]  ; Load the GDT
+mov eax, cr0
+or eax, 1               ; Set the PE bit (Protection Enable)
+mov cr0, eax
 
-    ; Print message: "Entering 16-bit Real Mode"
-    call print_string
-    db 'Entering 16-bit Real Mode', 0
+; Flush the instruction cache
+mov eax, 0x00000000
+mov cr3, eax
 
-    ; Set up GDT
+; Print message indicating the switch to 32-bit protected mode
+mov si, msg_protected_mode
+call print_message
 
-    lgdt [gdt_descriptor]
+; Jump to 32-bit code
+jmp 0x08:protected_mode_code
 
-    ; Enter Protected Mode
+; 32-bit protected mode code
+BITS 32
+protected_mode_code:
+mov eax, cr4
+or eax, 0x00000020      ; Set PAE bit
+mov cr4, eax
+mov eax, 0xC0000080
+cpuid
+shl eax, 1
+mov eax, cr4
+or eax, 0x00000010      ; Set the LME bit (Long Mode Enable)
+mov cr4, eax
 
-    call print_string
-    db 'Switching to Protected Mode', 0
+; Load the 64-bit GDT
+lgdt [gdt_descriptor]
 
-    mov eax, cr0
-    or eax, 1         ; Set PE bit (Protection Enable)
-    mov cr0, eax
+; Print message indicating the switch to 64-bit long mode
+mov si, msg_long_mode
+call print_message
 
-    jmp 0x08:protected_mode    ; Far jump to flush the pipeline
+; Switch to 64-bit mode
+mov eax, 0xC0000080
+cpuid
+shl eax, 1
+mov eax, cr4
+or eax, 0x00000020      ; Set the LME bit (Long Mode Enable)
+mov cr4, eax
+mov eax, 0x00000000
+mov cr0, eax
+jmp 0x10:64bit_mode_entry
 
-[BITS 32]             ; We are now in Protected Mode
+; 64-bit mode entry point
+BITS 64
+64bit_mode_entry:
+mov rax, 0xDEADBEEF     ; Test value for 64-bit mode
+mov rbx, rax            ; Store value in another register
 
+; Print "Done!" message
+mov si, msg_done
+call print_message
 
-protected_mode:
-    ; Set up segment registers
-    mov ax, 0x10     ; Data segment selector
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
+; Infinite loop
+jmp $
 
-    ; Print message: "Entering 32-bit Protected Mode"
-    call print_string
-    db 'Entering 32-bit Protected Mode', 0
-
-    ; Set up page tables for 64-bit mode
-
-    call setup_paging
-
-    ; Switch to Long Mode
-    call print_string
-    db 'Switching to Long Mode', 0
-
-    ; Enable PAE
-    mov eax, cr4
-    or eax, 0x20
-    mov cr4, eax
-
-    ; Enable Long Mode
-    rdmsr
-    or eax, 0x100     ; Set LME bit in EFER
-
-    wrmsr
-
-    ; Enable paging
-    mov eax, cr0
-    or eax, 0x80000000 ; Set PG bit
-    mov cr0, eax
-
-
-    jmp 0x08:long_mode    ; Far jump to enter Long Mode
-
-[BITS 64]             ; We are now in Long Mode
-
-long_mode:
-    ; Set up segment registers
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-
-    ; Print message: "Entering 64-bit Long Mode"
-    call print_string
-    db 'Entering 64-bit Long Mode', 0
-
-    hlt               ; Halt the CPU
-
-; Simple function to print a string on the screen
-print_string:
-
-    pusha
-    mov ah, 0x0E     ; Teletype output (BIOS interrupt)
-.next_char:
-    lodsb            ; Load next character from string
-
-    cmp al, 0
-    je .done         ; If null terminator, end
-    int 0x10         ; BIOS interrupt to print character
-    jmp .next_char
-.done:
-    popa
-    ret
-
-; GDT setup
+; Data section for GDT
 gdt_start:
-    dq 0x0000000000000000   ; Null descriptor
-    dq 0x00CF9A000000FFFF   ; Code segment descriptor
-    dq 0x00CF92000000FFFF   ; Data segment descriptor
+    ; Null descriptor
+    dq 0x0000000000000000
+    ; Code segment descriptor
+    dq 0x00CF9A000000FFFF
+    ; Data segment descriptor
+    dq 0x00CF92000000FFFF
 gdt_end:
 
 gdt_descriptor:
     dw gdt_end - gdt_start - 1
     dd gdt_start
 
-; Page Table setup for 64-bit mode (Identity mapping)
-setup_paging:
-    ; Identity map first 4 MB
-    mov eax, cr3         ; Get current page directory base register
-
-    mov eax, page_directory
-    mov cr3, eax         ; Load it into CR3
+; Subroutine to print a message
+print_message:
+    mov di, si            ; Copy address of the message to DI
+print_char:
+    lodsb                 ; Load byte at DS:SI into AL and increment SI
+    cmp al, 0             ; Check if it's the null terminator
+    je print_cr           ; Jump to print carriage return if end of string
+    mov ah, 0x0E          ; BIOS teletype function
+    int 0x10              ; Print the character in AL
+    jmp print_char        ; Loop to print next character
+print_cr:
+    ; Print carriage return and line feed
+    mov al, 0x0D          ; Carriage return
+    int 0x10              ; Print carriage return
+    mov al, 0x0A          ; Line feed
+    int 0x10              ; Print line feed
     ret
 
-align 4096
-page_directory:
-    dd page_table - 0xC0000000 + 3
-    times 1023 dd 0
-page_table:
-    times 1024 dd 0x00000000 + 3
-
-
-times 510-($-$$) db 0 ; Pad to make 512 bytes
-dw 0xAA55             ; Boot signature
+TIMES 510 - ($ - $$) DB 0  ; Pad the rest of the sector with zeroes
+DW 0xAA55                ; Boot sector signature
 
