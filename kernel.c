@@ -13,7 +13,7 @@ void kernel_main() {
 
     // Halt the CPU
     while (1) {
-        asm volatile ("hlt");
+        //asm volatile ("hlt");
     }
 }
 

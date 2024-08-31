@@ -19,7 +19,7 @@ start:
     ; Load second stage bootloader (assuming it is on the second sector)
     mov bx, 0x0200         ; Load address: 0x0000:0x0200 (offset 0x0200)
     mov dh, 0              ; Head 0
-    mov dl, 0x02           ; Drive 0 (floppy)
+    mov dl, 0x80           ; Drive 0 (floppy)
     mov ch, 0              ; Track 0
     mov cl, 2              ; Sector 2
     mov ah, 0x02           ; BIOS: Read sectors
