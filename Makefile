@@ -26,13 +26,15 @@ kernel_entry.o : kernel_entry.asm
 	nasm -f elf32 -o kernel_entry.o kernel_entry.asm
 
 kernel.o : kernel.c
-	gcc -m32 -ffreestanding -fno-pic -c kernel.c -o kernel.o
+	i686-elf-gcc -m32 -ffreestanding -fno-pic -c kernel.c -o kernel.o
 
 kernel.bin : kernel.o kernel_entry.o
-	ld -m elf_i386 -T linker.ld -Ttext 0x1000 --oformat binary -o kernel.bin kernel_entry.o kernel.o
+	i686-elf-ld -m elf_i386 -T linker.ld -Ttext 0x1000 --oformat binary -o kernel.bin kernel_entry.o kernel.o
 
 hello_kernel.bin : hello_kernel.asm
 	nasm -f bin -o hello_kernel.bin hello_kernel.asm
 
 clean :
 	rm *.o
+	rm *.img
+	rm *.bin

@@ -7,6 +7,8 @@ start:
     mov es, ax
     mov [es:164], byte '3'   ; Offset for row 2, col 3
     mov [es:165], byte 0x07   ; Attribute byte
+    xor ax, ax
+    mov es, ax
 
     ; Load the kernel from disk (floppy disk assumed)
     mov ah, 0x02         ; BIOS read sector function
