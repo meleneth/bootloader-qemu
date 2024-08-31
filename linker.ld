@@ -1,26 +1,27 @@
-ENTRY(_start)
+ENTRY(kernel_main)
+
 
 SECTIONS
 {
-    /* Start the code at address 0x1000 */
+    /* Set the starting address of the kernel */
     . = 0x1000;
 
+    /* The text section for code */
     .text : {
         *(.text)
     }
 
-    .rodata : {
-        *(.rodata)
-    }
-
+    /* The data section for initialized data */
     .data : {
         *(.data)
     }
 
+    /* The bss section for uninitialized data */
     .bss : {
         *(.bss)
+        *(COMMON)
     }
 
-    /DISCARD/ : { *(.eh_frame) }
+    /* Align the end of the kernel to a 4-byte boundary */
+    . = ALIGN(4);
 }
-

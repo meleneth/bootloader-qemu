@@ -1,44 +1,47 @@
-; First stage bootloader (boot1.asm)
-[bits 16]
-[org 0x7C00]
+[BITS 16]
+[ORG 0x7C00]
 
 start:
-    xor ax, ax             ; Clear AX
-    mov ds, ax             ; Set DS to 0x0000
-    mov es, ax             ; Set ES to 0x0000
-    mov ss, ax             ; Set SS to 0x0000
-    mov sp, 0x7C00         ; Set stack pointer to 0x7C00
+    ; Clear the screen
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov di, 0xb800
+    mov cx, 2000
+    mov al, ' '
+    mov ah, 0x07
+    rep stosw
 
-    ; Print '1' using BIOS interrupt 0x10
-    mov ah, 0x0E           ; BIOS teletype function
-    mov al, '1'            ; Character to print
-    mov bh, 0x00           ; Page number (0)
-    mov bl, 0x07           ; Text attribute (light grey on black background)
-    int 0x10               ; Call BIOS interrupt 0x10
+    ; Write 'd' to the first column of the second row (row 2, col 1)
+    mov ax, 0x0B800
+    mov es, ax
+    mov [es:160], byte 'd'   ; 160 is the offset for the 2nd row, 1st column
+    mov [es:161], byte 0x07   ; Attribute byte
 
-    ; Load second stage bootloader (assuming it is on the second sector)
-    mov bx, 0x0200         ; Load address: 0x0000:0x0200 (offset 0x0200)
-    mov dh, 0              ; Head 0
-    mov dl, 0x80           ; Drive 0 (floppy)
-    mov ch, 0              ; Track 0
-    mov cl, 2              ; Sector 2
-    mov ah, 0x02           ; BIOS: Read sectors
-    mov al, 1              ; Number of sectors to read
-    int 0x13               ; Call BIOS interrupt 13h
+    xor ax, ax
+    mov es, ax
 
-    jc disk_error          ; If carry flag is set, there was an error
+    ; Load the second stage bootloader from disk (floppy disk assumed)
+    mov ah, 0x02         ; BIOS read sector function
+    mov al, 1            ; Number of sectors to read
+    mov ch, 0            ; Track (cylinder) number
+    mov cl, 2            ; Sector number
+    mov dh, 0            ; Head number
+    mov dl, 0x80            ; Drive number (0 = A:)
+    mov bx, 0x0200       ; Address to load to (0x8000)
+    int 0x13             ; Call BIOS
 
-    jmp 0x0000:0x0200      ; Jump to the second stage bootloader
+    ; Write '1' to the second column of the second row (row 2, col 2)
+    mov ax, 0x0B800
+    mov es, ax
+    mov [es:162], byte '1'
+    mov [es:163], byte 0x07
+    xor ax, ax
+    mov es, ax
 
-disk_error:
-    ; Print '1' using BIOS interrupt 0x10
-    mov ah, 0x0E           ; BIOS teletype function
-    mov al, 'x'            ; Character to print
-    mov bh, 0x00           ; Page number (0)
-    mov bl, 0x07           ; Text attribute (light grey on black background)
-    int 0x10               ; Call BIOS interrupt 0x10
-    hlt                    ; Halt the CPU if there is an error
+    ; Jump to second stage
+    jmp 0x0000:0x0200
 
-times 510-($-$$) db 0      ; Pad with zeros to make the boot sector 512 bytes
-dw 0xAA55                  ; Boot signature (must be 0xAA55)
+    times 510-($-$$) db 0   ; Fill remaining bytes with 0
+    dw 0xAA55               ; Boot signature
 
